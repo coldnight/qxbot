@@ -14,6 +14,8 @@ import threading
 from hashlib import md5
 from util import HttpHelper, get_logger, upload_file
 
+from settings import QQ, QQ_PWD
+
 class WebQQ(object):
     """ WebQQ
     :param :qid QQ号"""
@@ -286,5 +288,5 @@ class WebQQ(object):
 
 
 if __name__ == "__main__":
-    webqq = WebQQ(1685359365)
-    webqq.login("connect")
+    webqq = WebQQ(QQ)
+    webqq.login(QQ_PWD)
