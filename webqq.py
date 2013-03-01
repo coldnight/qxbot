@@ -36,6 +36,7 @@ class WebQQ(object):
         self.require_check = False
         self.msg_dispatch = message_dispatch
         self.QUIT = False
+        self.last_msg = None
 
     def check(self):
         """ 检查是否需要验证码
@@ -271,20 +272,22 @@ class WebQQ(object):
                 return info.get("result", {}).get("account")
 
     def send_group_msg(self, group_uin, content):
-        gid = self.group_map.get(group_uin).get("gid")
-        content = [content,["font",
-                   {"name":"宋体", "size":10, "style":[0,0,0],
-                    "color":"000000"}]]
-        r = {"group_uin": gid, "content": json.dumps(content),
-             "msg_id": self.msg_id, "clientid": self.clientid,
-             "psessionid": self.psessionid}
-        self.msg_id += 1
-        url = "http://d.web2.qq.com/channel/send_qun_msg2"
-        params = [("r", json.dumps(r)), ("sessionid", self.psessionid),
-                  ("clientid", self.clientid)]
-        helper = HttpHelper(url, params, "POST")
-        helper.add_header("Referer", "http://d.web2.qq.com/proxy.html")
-        helper.open()
+        if content != self.last_msg:
+            self.last_msg = content
+            gid = self.group_map.get(group_uin).get("gid")
+            content = [content,["font",
+                    {"name":"宋体", "size":10, "style":[0,0,0],
+                        "color":"000000"}]]
+            r = {"group_uin": gid, "content": json.dumps(content),
+                "msg_id": self.msg_id, "clientid": self.clientid,
+                "psessionid": self.psessionid}
+            self.msg_id += 1
+            url = "http://d.web2.qq.com/channel/send_qun_msg2"
+            params = [("r", json.dumps(r)), ("sessionid", self.psessionid),
+                    ("clientid", self.clientid)]
+            helper = HttpHelper(url, params, "POST")
+            helper.add_header("Referer", "http://d.web2.qq.com/proxy.html")
+            helper.open()
 
 
 if __name__ == "__main__":

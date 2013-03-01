@@ -13,5 +13,3 @@ pip install -r dev_requirements.txt
 ## 运行
 python qxbot.py
 
-## 问题
-群会收到两遍消息
