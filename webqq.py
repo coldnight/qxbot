@@ -304,8 +304,3 @@ class WebQQ(object):
         helper = HttpHelper(url, params)
         helper.add_header("Referer", "http://web2.qq.com/")
         return helper.open()
-
-
-if __name__ == "__main__":
-    webqq = WebQQ(QQ)
-    webqq.login(QQ_PWD)
