@@ -154,6 +154,7 @@ def upload_file(filename, path):
     - `path`      文件路径
     """
     form = Form()
+    filename = filename.encode("utf-8")
     form.add_file(fieldname='uploadfile', filename=filename,
                     fileHandle=open(path))
     helper = HttpHelper("http://paste.linuxzen.com", form)

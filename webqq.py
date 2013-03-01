@@ -289,6 +289,22 @@ class WebQQ(object):
             helper.add_header("Referer", "http://d.web2.qq.com/proxy.html")
             helper.open()
 
+    def get_group_msg_img(self, uin, info):
+        """ 获取消息中的图片 """
+        name = info.get("name")
+        file_id = info.get("file_id")
+        key = info.get("key")
+        server = info.get("server")
+        ip, port = server.split(":")
+        gid = self.group_map.get(uin, {}).get("gid")
+        url = "http://web2.qq.com/cgi-bin/get_group_pic"
+        params = [("type", 0), ("gid", gid), ("uin", uin),("rip", ip),
+                  ("rport", port), ("fid", file_id), ("pic", name),
+                  ("vfwebqq", self.vfwebqq), ("t", time.time())]
+        helper = HttpHelper(url, params)
+        helper.add_header("Referer", "http://web2.qq.com/")
+        return helper.open()
+
 
 if __name__ == "__main__":
     webqq = WebQQ(QQ)
