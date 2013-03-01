@@ -250,6 +250,12 @@ class WebQQ(object):
                 uin = m.get("uin")
                 group_m_map[gcode][uin] = m
 
+            cards = info.get("result", {}).get("cards", [])
+            for card in cards:
+                uin = card.get("muin")
+                group_name = card.get("card")
+                group_m_map[gcode][uin]["nick"] = group_name
+
         self.group_m_map = group_m_map
         self.msg_dispatch.get_map()
         return group_m_map
