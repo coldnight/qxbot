@@ -14,11 +14,10 @@ import threading
 from hashlib import md5
 from util import HttpHelper, get_logger, upload_file
 
-from settings import QQ, QQ_PWD
-
 class WebQQ(object):
     """ WebQQ
-    :param :qid QQ号"""
+    :param :qid QQ号
+    :param :message_dispatch 消息调度"""
     def __init__(self, qid, message_dispatch):
         self.logger = get_logger()
         self._qid = qid
@@ -304,3 +303,11 @@ class WebQQ(object):
         helper = HttpHelper(url, params)
         helper.add_header("Referer", "http://web2.qq.com/")
         return helper.open()
+
+    def get_group_name(self, gcode):
+        """ 根据gcode获取群名 """
+        return self.group_map.get(gcode, {}).get("name")
+
+    def get_group_member_nick(self, gcode, uin):
+        return self.group_m_map.get(gcode, {}).get(uin, {}).get("nick")
+

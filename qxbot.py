@@ -28,13 +28,6 @@ class QxBot(object):
         self.thread_pool = ThreadPool(3)
         self.thread_pool.start()
 
-    def get_group_name(self, gcode):
-        """ 根据gcode获取群名 """
-        return self.webqq.group_map.get(gcode, {}).get("name")
-
-    def get_group_member_nick(self, gcode, uin):
-        return self.webqq.group_m_map.get(gcode, {}).get(uin, {}).get("nick")
-
     def run(self):
         self.thread_pool.add_job(self.webqq.login, QQ_PWD)
         self.thread_pool.add_job(self.handle_qq)

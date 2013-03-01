@@ -79,8 +79,8 @@ class MessageDispatch(object):
         uin = value.get("send_uin")
         contents = value.get("content", [])
         content = self.handle_qq_group_contents(uin, contents)
-        gname = self.qxbot.get_group_name(gcode)
-        uname = self.qxbot.get_group_member_nick(gcode, uin)
+        gname = self.qxbot.webqq.get_group_name(gcode)
+        uname = self.qxbot.webqq.get_group_member_nick(gcode, uin)
         body = u"[{0}][{1}] {2}".format(gname, uname, content)
         msg = {"to":self.get_xmpp_account(gcode), "body":body}
         self.xmpp_msg_queue.put(msg)
