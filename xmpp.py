@@ -18,7 +18,10 @@ from pyxmpp2.ext.version import VersionProvider
 
 from util import get_logger, EpollMainLoop
 
-from settings import XMPP_ACCOUNT, XMPP_PASSWD
+from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, QQ_PWD
+
+from webqq import (CheckHandler, WebQQ, BeforeLoginHandler, CheckedEvent,
+                   WebQQLoginedEvent, BeforeLoginEvent, LoginHandler)
 
 __version__ = '0.0.1 alpha'
 
@@ -26,7 +29,7 @@ USER = XMPP_ACCOUNT
 PASSWORD = XMPP_PASSWD
 
 class XMPPBot(EventHandler, XMPPFeatureHandler):
-    def __init__(self, message_dispatch):
+    def __init__(self):
         my_jid = JID(USER+'/Bot')
         self.my_jid = my_jid
         settings = XMPPSettings({
@@ -41,11 +44,15 @@ class XMPPBot(EventHandler, XMPPFeatureHandler):
 
         settings["password"] = PASSWORD
         version_provider = VersionProvider(settings)
+        event_queue = settings["event_queue"]
+        self.webqq = WebQQ(QQ, event_queue)
+        checkhandler = CheckHandler(self.webqq)
         self.connected = False
-        mainloop = EpollMainLoop(settings)
-        self.client = Client(my_jid, [self, version_provider], settings, mainloop)
+        self.mainloop = EpollMainLoop(settings)
+        self.client = Client(my_jid, [self, version_provider, checkhandler],
+                             settings, self.mainloop)
         self.logger = get_logger()
-        self.msg_dispatch = message_dispatch
+        #self.msg_dispatch = message_dispatch
 
     def run(self, timeout = None):
         self.client.connect()
@@ -93,7 +100,8 @@ class XMPPBot(EventHandler, XMPPFeatureHandler):
 
     @message_stanza_handler()
     def handle_message(self, stanza):
-        self.msg_dispatch.dispatch_xmpp(stanza)
+        pass
+        #self.msg_dispatch.dispatch_xmpp(stanza)
 
     @event_handler(DisconnectedEvent)
     def handle_disconnected(self, event):
@@ -102,6 +110,21 @@ class XMPPBot(EventHandler, XMPPFeatureHandler):
     @event_handler(ConnectedEvent)
     def handle_connected(self, event):
         self.connected = True
+
+    @event_handler(CheckedEvent)
+    def handle_webqq_checked(self, event):
+        bloginhandler = BeforeLoginHandler(self.webqq, QQ_PWD)
+        self.mainloop.add_handler(bloginhandler)
+
+    @event_handler(BeforeLoginEvent)
+    def handle_webqq_blogin(self, event):
+        loginhandler = LoginHandler(self.webqq)
+        self.mainloop.add_handler(loginhandler)
+
+    @event_handler(WebQQLoginedEvent)
+    def handle_webqq_logined(self, event):
+        #TODO 心跳和poll
+        pass
 
     @property
     def roster(self):
@@ -132,3 +155,7 @@ class XMPPBot(EventHandler, XMPPFeatureHandler):
             to = JID(to)
         msg = self.make_message(to, 'normal', body)
         self.stream.send(msg)
+
+if __name__ == "__main__":
+        xmpp = XMPPBot()
+        xmpp.run()

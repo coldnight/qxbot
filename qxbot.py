@@ -15,7 +15,6 @@ from util import ThreadPool, get_logger
 from settings import QQ, QQ_PWD, BRIDGES
 
 
-
 class QxBot(object):
     def __init__(self):
         self.logger = get_logger()
@@ -29,10 +28,10 @@ class QxBot(object):
         self.thread_pool.start()
 
     def run(self):
-        self.thread_pool.add_job(self.webqq.login, QQ_PWD)
+        self.thread_pool.add_job(self.xmpp.run)
         self.thread_pool.add_job(self.handle_qq)
         self.thread_pool.add_job(self.handle_xmpp)
-        self.xmpp.run()
+        self.webqq.login(QQ_PWD)
 
     def handle_xmpp(self):
         while True:
