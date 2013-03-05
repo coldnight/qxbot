@@ -86,29 +86,26 @@ class HTTPSock(object):
         path = path + "?" + query if query else path
         path = path if path else "/"
         method = "POST" if data else "GET"
-        datas = ["{0} {1} HTTP/1.1".format(method, path)]
-        headers["Host"] = parse.netloc
-        headers["Connection"] = "Keep-Alive"
-        headers["Accept"] = "*/*"
-        headers["Accept-Charset"] = "UTF-8,*;q=0.5"
-        headers["Accept-Encoding"] = "gzip,deflate,sdch"
-        headers["Accept-Language"] = "zh-CN,zh;q=0.8"
-        headers["User-Agent"] =  "Mozilla/5.0 (X11; Linux x86_64)"\
-                        "AppleWebKit/537.11 (KHTML, like Gecko)"\
-                        " Chrome/23.0.1271.97 Safari/537.11a"
-        last = []
-        for key, value in headers.items():
-            if key.lower() == "content-type":
-                last.append((key.title(), value))
-            else:
-                datas.append("{0}: {1}".format(key.title(), value))
+        _buffer= ["{0} {1} HTTP/1.1".format(method, path)]
+        e_headers = [(k.lower(), v) for k, v in headers.items()]
+        headers = []
+        headers.append(("Host", parse.netloc))
+        headers.append(("Connection", "keep-alive"))
+        headers.append(("Accept", "*/*"))
+        headers.append(("Accept-Charset", "UTF-8,*;q=0.5"))
+        headers.append(("Accept-Encoding", "gzip,deflate,sdch"))
+        headers.append(("Accept-Language", "zh-CN,zh;q=0.8"))
+        headers.append(("User-Agent", "Mozilla/5.0 (X11; Linux x86_64)"\
+                        " AppleWebKit/537.11 (KHTML, like Gecko)"\
+                        " Chrome/23.0.1271.97 Safari/537.11"))
+        headers+= e_headers
         if data:
-            last.append(("Content-Lenght",   len(data)))
-        for key, value in last:
-            datas.append("{0}: {1}".format(key.title(), value))
-
-        result = "\r\n".join(datas) + "\r\n\r\n"
-        if data:
+            headers.append(("Content-Length",   len(data)))
+        for key, value in headers:
+            _buffer.append("{0}: {1}".format(key.title(), value))
+        _buffer.extend(("", ""))
+        result = "\r\n".join(_buffer)
+        if isinstance(data, str):
             result += data
         return result
 

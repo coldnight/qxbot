@@ -38,14 +38,14 @@ class Form(object):
         self.form_fields = []
         self.files = []
         self.boundary = mimetools.choose_boundary()
-        self.content_type = "application/x-www-form-urlencoded"
+        self.content_type = 'multipart/form-data; boundary=%s' % self.boundary
         return
 
     def get_content_type(self):
         return self.content_type
 
     def add_field(self, name, value):
-        self.form_fields.append((name, value))
+        self.form_fields.append((str(name), str(value)))
         return
 
     def add_file(self, fieldname, filename, fileHandle, mimetype=None):
@@ -55,8 +55,6 @@ class Form(object):
                          or
                          'applicatioin/octet-stream')
         self.files.append((fieldname, filename, mimetype, body))
-        self.content_type = 'multipart/form-data; boundary=%s' % self.boundary
-
         return
 
     def __str__(self):
@@ -87,13 +85,16 @@ class Form(object):
 
 
 class HttpHelper(object):
-    def __init__(self, url = None, form = None, method = 'GET'):
+    def __init__(self, url = None, form = None, method = 'GET', jar = None):
         self.logger = get_logger()
         self._url = url
         self._form = form
         self._method = method
-        self._cookie_file = r'/tmp/cookie.txt'
-        self._cookiejar = cookielib.MozillaCookieJar(self._cookie_file)
+        if jar is None:
+            self._cookie_file = r'/tmp/cookie.txt'
+            self._cookiejar = cookielib.MozillaCookieJar(self._cookie_file)
+        else:
+            self._cookiejar = jar
         self.http_cookie = urllib2.HTTPCookieProcessor( self._cookiejar)
         self._opener = urllib2.build_opener(self.http_cookie)
         if url:
@@ -166,6 +167,7 @@ class EpollMainLoop(MainLoopBase):
     READ_ONLY = (select.EPOLLIN | select.EPOLLPRI | select.EPOLLHUP |
                  select.EPOLLERR |select.EPOLLET)
     READ_WRITE = READ_ONLY | select.EPOLLOUT
+    WRITE_ONLY = select.EPOLLOUT
     def __init__(self, settings = None, handlers= None):
         self.epoll = select.epoll()
         self._handlers = {}
@@ -204,11 +206,13 @@ class EpollMainLoop(MainLoopBase):
         self._handlers[fileno] = handler
         events = 0
         if handler.is_readable():
+            self.logger.debug(" {0!r} readable".format(handler))
             events |= self.READ_ONLY
         if handler.is_writable():
+            self.logger.debug(" {0!r} writable".format(handler))
             events |= self.READ_WRITE
 
-        if events:
+        if events is not None: # events may be 0
             if fileno in self._exists_fd:
                 self.epoll.modify(fileno, events)
             else:

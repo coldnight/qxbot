@@ -12,36 +12,69 @@ import random
 import tempfile
 import threading
 from hashlib import md5
+from functools import partial
 from util import HttpHelper, get_logger, upload_file
 
 from http_socket import HTTPSock
 
-from pyxmpp2.mainloop.interfaces import IOHandler, HandlerReady, Event
+from pyxmpp2.mainloop.interfaces import (IOHandler, HandlerReady, Event,
+                                         PrepareAgain)
 
 http_sock = HTTPSock()
 
 class WebQQEvent(Event):
     webqq = None
+    handler = None
 
 class CheckedEvent(WebQQEvent):
-    def __init__(self, check_data):
+    def __init__(self, check_data, handler):
         self.check_data = check_data
+        self.handler = handler
 
     def __unicode__(self):
         return u"WebQQ Checked: {0}".format(self.check_data)
 
 
 class BeforeLoginEvent(WebQQEvent):
-    def __init__(self, back_data):
+    def __init__(self, back_data, handler):
         self.back_data = back_data
+        self.handler = handler
 
     def __unicode__(self):
         return u"WebQQ Before Login: {0}".format(self.back_data)
 
 
 class WebQQLoginedEvent(WebQQEvent):
+    def __init__(self, handler):
+        self.handler = handler
+
     def __unicode__(self):
         return u"WebQQ Logined"
+
+
+class WebQQHeartbeatEvent(WebQQEvent):
+    def __init__(self, handler):
+        self.handler = handler
+
+    def __unicode__(self):
+        return u"WebQQ Heartbeat"
+
+
+class WebQQPollEvent(WebQQEvent):
+    def __init__(self, handler):
+        self.handler = handler
+
+    def __unicode__(self):
+        return u"WebQQ Poll"
+
+
+class WebQQMessageEvent(WebQQEvent):
+    def __init__(self, msg, handler):
+        self.handler = handler
+        self.message = msg
+
+    def __unicode__(self):
+        return u"WebQQ Got msg: {0}".format(self.message)
 
 
 class WebQQHandler(IOHandler):
@@ -49,22 +82,42 @@ class WebQQHandler(IOHandler):
         self._readable = False
         self._writable = True
         self.webqq = webqq
+        self.lock = threading.RLock()
+        self._cond = threading.Condition(self.lock)
         self.setup(*args, **kwargs)
 
     def fileno(self):
-        return self.sock.fileno()
+        with self.lock:
+            if self.sock is not None:
+                return self.sock.fileno()
+
+        return None
 
     def is_readable(self):
-        return self._readable
+        return self.sock is not None and self._readable
 
     def wait_for_readability(self):
-        return True
+        with self.lock:
+            while True:
+                if self.sock is None or not self._readable:
+                    return False
+                else:
+                    return True
+            self._cond.wait()
+
 
     def is_writable(self):
-        return self._writable
+        with self.lock:
+            return self.sock and self.data and self._writable
 
     def wait_for_writability(self):
-        return True
+        with self.lock:
+            while True:
+                if self.sock and self.data and self._writable:
+                    return True
+                else:
+                    return False
+            self._cond.wait()
 
     def prepare(self):
         return HandlerReady()
@@ -73,16 +126,19 @@ class WebQQHandler(IOHandler):
         pass
 
     def handle_hup(self):
-        pass
+        with self.lock:
+            pass
 
     def handle_write(self):
         pass
 
     def handle_err(self):
-        pass
+        with self.lock:
+            self.sock.close()
 
     def handle_nval(self):
-        pass
+        if self.sock is None:
+            return
 
     def close(self):
         self.sock.close()
@@ -106,7 +162,7 @@ class CheckHandler(WebQQHandler):
         self._readable = False
         resp = http_sock.make_response(self.sock, self.req, self.method)
         self.webqq.check_data = resp.read()
-        self.webqq.event(CheckedEvent(self.webqq.check_data))
+        self.webqq.event(CheckedEvent(self.webqq.check_data, self))
 
     def handle_write(self):
         self.sock.sendall(self.data)
@@ -123,7 +179,7 @@ class BeforeLoginHandler(WebQQHandler):
     def setup(self, password):
         password = self.webqq.handle_pwd(password)
         params = [("u",self.webqq.qid), ("p",password),
-                  ("verifycode", self.webqq._vcode), ("webqq_type",10),
+                  ("verifycode", self.webqq.check_code), ("webqq_type",10),
                   ("remember_uin", 1),("login2qq",1),
                   ("aid", self.webqq.aid), ("u1", "http://www.qq.com"),
                   ("h", 1), ("ptredirect", 0), ("ptlang", 2052), ("from_ui", 1),
@@ -133,6 +189,14 @@ class BeforeLoginHandler(WebQQHandler):
         url = "https://ssl.ptlogin2.qq.com/login"
         self.method = "GET"
         self.req = http_sock.make_request(url, params, self.method)
+        if self.webqq.require_check:
+            self.req.add_header("Referer", "https://ui.ptlogin2.qq.com/cgi-"
+                                "bin/login?target=self&style=5&mibao_css=m_"
+                                "webqq&appid=1003903&enable_qlogin=0&no_ver"
+                                "ifyimg=1&s_url=http%3A%2F%2Fweb.qq.com%2Fl"
+                                "oginproxy.html&f_url=loginerroralert&stron"
+                                "g_login=1&login_state=10&t=20130221001")
+
         self.sock, self.data = http_sock.make_http_sock_data(self.req)
 
     def handle_write(self):
@@ -144,7 +208,7 @@ class BeforeLoginHandler(WebQQHandler):
         self._readable = False
         resp = http_sock.make_response(self.sock, self.req, self.method)
         self.webqq.blogin_data = resp.read().decode("utf-8")
-        self.webqq.event(BeforeLoginEvent(self.webqq.blogin_data))
+        self.webqq.event(BeforeLoginEvent(self.webqq.blogin_data, self))
         eval("self.webqq."+self.webqq.blogin_data.rstrip().rstrip(";"))
 
 
@@ -170,27 +234,96 @@ class LoginHandler(WebQQHandler):
         self.method = "POST"
         self.req = http_sock.make_request(url, params, self.method)
 
-        self.req.add_header("Pragma", "no-cache")
-        self.req.add_header("Cache-Control", "no-cache")
         self.req.add_header("Referer", "http://d.web2.qq.com/proxy.html?"
                                 "v=20110331002&callback=1&id=3")
-        #self.req.add_header("Origin", "http://d.web2.qq.com")
+        self.req.add_header("Origin", "http://d.web2.qq.com")
         self.sock, self.data = http_sock.make_http_sock_data(self.req)
 
     def handle_write(self):
         self._writable = False
         self.sock.sendall(self.data)
+        #body = "\r\n\r\n".join(self.data.split("\r\n\r\n")[1:])
+        #self.sock.sendall(body)
         self._readable = True
 
     def handle_read(self):
         self._readable = False
         resp = http_sock.make_response(self.sock, self.req, self.method)
         tmp = resp.read()
-        print tmp
         data = json.loads(tmp)
         self.webqq.vfwebqq = data.get("result", {}).get("vfwebqq")
         self.webqq.psessionid = data.get("result", {}).get("psessionid")
-        self.webqq.event(WebQQLoginedEvent())
+        self.webqq.event(WebQQLoginedEvent(self))
+
+
+class HeartbeatHandler(WebQQHandler):
+    """ 心跳 """
+    def setup(self, delay = 0):
+        self._readable = False
+        self.delay = delay
+        url = "http://web.qq.com/web2/get_msg_tip"
+        params = [("uin", ""), ("tp", 1), ("id", 0), ("retype", 1),
+                    ("rc", self.webqq.rc), ("lv", 2),
+                  ("t", int(self.webqq.hb_last_time * 1000))]
+        self.method = "GET"
+        self.req = http_sock.make_request(url, params, self.method)
+        self.sock, self.data = http_sock.make_http_sock_data(self.req)
+
+    def handle_write(self):
+        self.sock.sendall(self.data)
+        self.webqq.event(WebQQHeartbeatEvent(self), self.delay)
+        self._writable = False
+
+    def prepare(self):
+        """
+        now = time.time()
+        if self.webqq.start_time == self.webqq.hb_last_time or\
+           now - self.webqq.hb_last_time >= 5:
+            self.webqq.hb_last_time = now
+            return HandlerReady()
+        self._writeable = True
+        """
+        return HandlerReady()
+
+    def is_readable(self):
+        return False
+
+    def is_writable(self):
+        with self.lock:
+            return self.sock and self.data and self._writable
+
+class PollHandler(WebQQHandler ):
+    """ 获取消息 """
+    def setup(self, delay = 0):
+        self.delay = delay
+        url = "http://d.web2.qq.com/channel/poll2"
+        params = [("r", '{"clientid":"%s", "psessionid":"%s",'
+                   '"key":0, "ids":[]}' % (self.webqq.clientid,
+                                           self.webqq.psessionid)),
+                  ("clientid", self.webqq.clientid),
+                  ("psessionid", self.webqq.psessionid)]
+        self.method = "POST"
+        self.req = http_sock.make_request(url, params, self.method)
+        self.req.add_header("Referer", "http://d.web2.qq.com/proxy.html?v="
+                            "20110331002&callback=1&id=2")
+        self.sock, self.data = http_sock.make_http_sock_data(self.req)
+
+    def handle_write(self):
+        self._writable = False
+        self.sock.sendall(self.data)
+        self.webqq.event(WebQQPollEvent(self), self.delay)
+        self._readable = True
+
+    def handle_read(self):
+        self._readable = False
+        resp = http_sock.make_response(self.sock, self.req, self.method)
+        tmp = resp.read()
+        data = json.loads(tmp)
+        self.webqq.event(WebQQMessageEvent(data, self))
+
+    def is_writable(self):
+        with self.lock:
+            return self.sock and self.data and self._writable
 
 
 class WebQQ(object):
@@ -210,32 +343,49 @@ class WebQQ(object):
         self.skey = None
         self.ptwebqq = None
         self.require_check = False
-        #self.msg_dispatch = message_dispatch
         self.QUIT = False
         self.last_msg = None
         self.event_queue = event_queue
         self.check_data = None           # CheckHanlder返回的数据
         self.blogin_data = None          # 登录前返回的数据
+        self.rc = 1
+        self.start_time = time.time()
+        self.hb_last_time = self.start_time
+        self.poll_last_time = self.start_time
+        self._helper = HttpHelper()
 
-    def event(self, event):
-        self.event_queue.put(event)
+    def event(self, event, delay = 0):
+        """ timeout可以延迟将事件放入事件队列 """
+        if delay:
+            target = partial(self.put_delay_event, self.event_queue, event, delay)
+            t = threading.Thread(target = target)
+            t.setDaemon(True)
+            t.start()
+        else:
+            self.event_queue.put(event)
+
+    def put_delay_event(self, queue,event, delay):
+        """ 应当放入线程中 """
+        time.sleep(delay)
+        queue.put(event)
 
     def ptui_checkVC(self, r, vcode, uin):
         """ 处理检查的回调 返回三个值 """
         if int(r) == 0:
             self.logger.info("Check Ok")
+            self.check_code = vcode
         else:
             self.logger.warn("Check Error")
-            vcode = self.get_check_img(vcode)
+            self.check_code = self.get_check_img(vcode)
             self.require_check = True
-        return r, vcode, uin
+        return r, self.check_code, uin
 
     def get_check_img(self, vcode):
         """ 获取验证图片 """
         url = "https://ssl.captcha.qq.com/getimage"
         params = [("aid", self.aid), ("r", random.random()),
                   ("uin", self.qid)]
-        helper = HttpHelper(url, params)
+        helper = HttpHelper(url, params, jar = http_sock.cookiejar)
         res = helper.open()
         path = tempfile.mktemp()
         fp = open(path, 'wb')
@@ -334,44 +484,6 @@ class WebQQ(object):
             self.get_group_members()
             self.poll()
 
-    def poll(self):
-        """ 获取消息 """
-        url = "http://d.web2.qq.com/channel/poll2"
-        params = [("r", '{"clientid":"%s", "psessionid":"%s",'
-                   '"key":0, "ids":[]}' % (self.clientid,
-                                           self.psessionid)),
-                  ("clientid", self.clientid),
-                  ("psessionid", self.psessionid)]
-        helper = HttpHelper(url, params, "POST")
-        helper.add_header("Origin", "http://d.web2.qq.com")
-        helper.add_header("Referer", "http://d.web2.qq.com/proxy.html?v="
-                          "20110331002&callback=1&id=3")
-        self.logger.info("Start Poll")
-        while True:
-            res = helper.open()
-            data = res.read()
-            if data:
-                messages = json.loads(data)
-                self.logger.debug("Receiver Message %r", messages)
-                self.msg_dispatch.dispatch_qq(messages)
-            self.logger.debug("Poll Done")
-
-        self.QUIT = True
-
-    def heartbeat(self):
-        """ 心跳 """
-        url = "http://web.qq.com/web2/get_msg_tip"
-        i = 1
-        helper = HttpHelper()
-        while not self.QUIT:
-            params = [("uin", ""), ("tp", 1), ("id", 0), ("retype", 1),
-                      ("rc", i), ("lv", 2), ("t", int(time.time() * 1000))]
-            helper.change(url, params)
-            helper.open()
-            self.logger.info("Heartbeat")
-            i += 1
-            time.sleep(60)
-
     def get_group_map(self):
         """ 获取群映射列表 """
         self.logger.info("Get Group List")
@@ -421,7 +533,6 @@ class WebQQ(object):
                 group_m_map[gcode][uin]["nick"] = group_name
 
         self.group_m_map = group_m_map
-        self.msg_dispatch.get_map()
         return group_m_map
 
     def get_qid_with_uin(self, uin):
