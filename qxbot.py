@@ -15,6 +15,7 @@ from pyxmpp2.streamevents import DisconnectedEvent,ConnectedEvent
 from pyxmpp2.interfaces import XMPPFeatureHandler
 from pyxmpp2.interfaces import presence_stanza_handler, message_stanza_handler
 from pyxmpp2.ext.version import VersionProvider
+from pyxmpp2.roster import RosterReceivedEvent
 
 from utils import get_logger, EpollMainLoop
 
@@ -23,7 +24,10 @@ from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, QQ_PWD, BRIDGES
 from webqq import (CheckHandler, WebQQ, BeforeLoginHandler, CheckedEvent,
                    WebQQLoginedEvent, BeforeLoginEvent, LoginHandler,
                    HeartbeatHandler, PollHandler, WebQQHeartbeatEvent,
-                   WebQQMessageEvent, WebQQPollEvent)
+                   WebQQMessageEvent, WebQQPollEvent, RetryEvent,
+                   RemoveEvent, GroupMsgHandler, GroupListHandler,
+                   GroupListEvent, WebQQRosterUpdatedEvent,
+                   GroupMembersHandler, GroupMembersEvent)
 
 from message_dispatch import MessageDispatch
 
@@ -112,13 +116,17 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @event_handler(ConnectedEvent)
     def handle_connected(self, event):
+        pass
+
+    @event_handler(RosterReceivedEvent)
+    def handle_roster_received(self, event):
         checkhandler = CheckHandler(self.webqq)
         self.mainloop.add_handler(checkhandler)
         self.connected = True
 
     @event_handler(CheckedEvent)
     def handle_webqq_checked(self, event):
-        bloginhandler = BeforeLoginHandler(self.webqq, QQ_PWD)
+        bloginhandler = BeforeLoginHandler(self.webqq, password = QQ_PWD)
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(bloginhandler)
 
@@ -131,24 +139,83 @@ class QXBot(EventHandler, XMPPFeatureHandler):
     @event_handler(WebQQLoginedEvent)
     def handle_webqq_logined(self, event):
         self.mainloop.remove_handler(event.handler)
+        self.mainloop.add_handler(GroupListHandler(self.webqq))
+
+    @event_handler(GroupListEvent)
+    def handle_webqq_group_list(self, event):
+        self.mainloop.remove_handler(event.handler)
+        data = event.data
+        group_map = {}
+        if data.get("retcode") == 0:
+            group_list = data.get("result", {}).get("gnamelist", [])
+            for group in group_list:
+                gcode = group.get("code")
+                group_map[gcode] = group
+
+        self.webqq.group_map = group_map
+        i = 1
+        for gcode in group_map:
+            if i == len(group_map):
+                self.mainloop.add_handler(
+                    GroupMembersHandler(self.webqq, gcode = gcode, done = True))
+            else:
+                self.mainloop.add_handler(
+                    GroupMembersHandler(self.webqq, gcode = gcode, done = False))
+
+            i += 1
+
+    @event_handler(GroupMembersEvent)
+    def handle_group_members(self, event):
+        self.mainloop.remove_handler(event.handler)
+        members = event.data.get("result", {}).get("minfo", [])
+        self.webqq.group_m_map[event.gcode] = {}
+        for m in members:
+            uin = m.get("uin")
+            self.webqq.group_m_map[event.gcode][uin] = m
+        cards = event.data.get("result", {}).get("cards", [])
+        for card in cards:
+            uin = card.get("muin")
+            group_name = card.get("card")
+            self.webqq.group_m_map[event.gcode][uin]["nick"] = group_name
+
+        self.mainloop.add_handler(GroupListHandler(self.webqq, delay = 120))
+
+    @event_handler(WebQQRosterUpdatedEvent)
+    def handle_webqq_roster(self, event):
+        self.mainloop.remove_handler(event.handler)
+        self.msg_dispatch.get_map()
+        self.mainloop.add_handler(PollHandler(self.webqq))
         hb = HeartbeatHandler(self.webqq)
         self.mainloop.add_handler(hb)
-        self.mainloop.add_handler(PollHandler(self.webqq))
-        self.webqq.get_group_members()
 
     @event_handler(WebQQHeartbeatEvent)
     def handle_webqq_hb(self, event):
         self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(HeartbeatHandler(self.webqq, 60))
+        self.mainloop.add_handler(HeartbeatHandler(self.webqq, delay = 60))
 
     @event_handler(WebQQPollEvent)
     def handle_webqq_poll(self, event):
         self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(PollHandler(self.webqq, 3))
+        self.mainloop.add_handler(PollHandler(self.webqq, delay = 3))
 
     @event_handler(WebQQMessageEvent)
     def handle_webqq_msg(self, event):
         self.msg_dispatch.dispatch_qq(event.message)
+
+    @event_handler(RetryEvent)
+    def handle_retry(self, event):
+        self.mainloop.remove_handler(event.handler)
+        handler = event.cls(self.webqq, event.req, *event.args, **event.kwargs)
+        self.mainloop.add_handler(handler)
+
+    @event_handler(RemoveEvent)
+    def handle_remove(self, event):
+        self.mainloop.remove_handler(event.handler)
+
+    def send_qq_group_msg(self, group_uin, content):
+        handler = GroupMsgHandler(self.webqq, group_uin = group_uin,
+                                  content = content)
+        self.mainloop.add_handler(handler)
 
     @property
     def roster(self):
@@ -169,7 +236,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
             `body` - 消息主体
         """
         if typ not in ['normal', 'chat', 'groupchat', 'headline']:
-            typ = 'normal'
+            typ = 'chat'
         m = Message(from_jid = self.my_jid, to_jid = to, stanza_type = typ,
                     body = body)
         return m
@@ -177,7 +244,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
     def send_msg(self, to, body):
         if not isinstance(to, JID):
             to = JID(to)
-        msg = self.make_message(to, 'normal', body)
+        msg = self.make_message(to, 'chat', body)
         self.stream.send(msg)
 
 if __name__ == "__main__":

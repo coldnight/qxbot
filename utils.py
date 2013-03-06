@@ -147,7 +147,7 @@ class HttpHelper(object):
             params = self._form
         logbody = "{0} {1} params {2!r}".format(self._method, self._url, params)
         self.logger.debug(logbody)
-        res = self._opener.open(self.request)
+        res = self._opener.open(self.request, timeout = 3)
         return res
 
 def upload_file(filename, path):
