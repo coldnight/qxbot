@@ -31,15 +31,21 @@ class MessageDispatch(object):
     def get_xmpp_account(self, uin):
         """ 根据uin获取桥接的XMPP帐号 """
         qid = self.get_qid_with_uin(uin)
+        xmpps = []
         for q, xmpp in self.bridges:
             if q == qid:
-                return xmpp
+                xmpps.append(xmpp)
+
+        return xmpps
 
     def get_uin_account(self, xmpp):
         """ 根据xmpp帐号获取桥接的qq号的uin """
+        qids = []
         for qid, x in self.bridges:
             if x == xmpp:
-                return self.qid_uin_map.get(qid)
+                qids.append(self.qid_uin_map.get(qid))
+
+        return qids
 
     def get_qid_with_uin(self, uin):
         qid = self.uin_qid_map.get(uin)
@@ -87,8 +93,8 @@ class MessageDispatch(object):
         gname = self.webqq.get_group_name(gcode)
         uname = self.webqq.get_group_member_nick(gcode, uin)
         body = u"[{0}][{1}] {2}".format(gname, uname, content)
-        to = self.get_xmpp_account(gcode)
-        self.qxbot.send_msg(to, body)
+        tos = self.get_xmpp_account(gcode)
+        [self.qxbot.send_msg(to, body) for to in tos]
 
     def dispatch_qq(self, qq_source):
         if not self._maped: self.get_map()
@@ -102,5 +108,5 @@ class MessageDispatch(object):
         if not self._maped: self.get_map()
         body = stanza.body
         frm = stanza.from_jid.bare().as_string()
-        to = self.get_uin_account(frm)
-        self.webqq.send_group_msg(to, body)
+        tos = self.get_uin_account(frm)
+        [self.webqq.send_group_msg(to, body) for to in tos]
