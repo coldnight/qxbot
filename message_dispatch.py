@@ -59,17 +59,21 @@ class MessageDispatch(object):
 
     def handle_qq_group_contents(self, uin, contents):
         result = []
-        content = contents[-1]
-        last = ""
+        content = ""
+        face = False
         for row in contents:
-            if len(row) == 2:
-                key, value = row
-                if key == "face" and not content.strip():
-                    last = u"(T T 只有表情,暂时解析不鸟)"
-                if key == "cface":
-                    result.append(self.get_group_msg_img(uin, value))
-        if not result and not content.strip() and last:
-            return last
+            if isinstance(row, (str, unicode)):
+                content += row
+            else:
+                if len(row) == 2:
+                    key, value = row
+                    if key == "face":
+                        face = True
+                    if key == "cface":
+                        result.append(self.get_group_msg_img(uin, value))
+
+        if not result and not content.strip() and face:
+            return u"(T T 只有表情,暂时解析不鸟)"
         else:
             return "\n".join(result) + content
 

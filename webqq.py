@@ -9,6 +9,7 @@
 import time
 import json
 import random
+import socket
 import tempfile
 import threading
 from hashlib import md5
@@ -270,7 +271,10 @@ class HeartbeatHandler(WebQQHandler):
         self.sock, self.data = http_sock.make_http_sock_data(self.req)
 
     def handle_write(self):
-        self.sock.sendall(self.data)
+        try:
+            self.sock.sendall(self.data)
+        except socket.error:
+            pass
         self.webqq.event(WebQQHeartbeatEvent(self), self.delay)
         self._writable = False
 
@@ -310,9 +314,13 @@ class PollHandler(WebQQHandler ):
 
     def handle_write(self):
         self._writable = False
-        self.sock.sendall(self.data)
+        try:
+            self.sock.sendall(self.data)
+        except socket.error:
+            pass
+        else:
+            self._readable = True
         self.webqq.event(WebQQPollEvent(self), self.delay)
-        self._readable = True
 
     def handle_read(self):
         self._readable = False
