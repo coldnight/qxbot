@@ -318,8 +318,11 @@ class PollHandler(WebQQHandler ):
         self._readable = False
         resp = http_sock.make_response(self.sock, self.req, self.method)
         tmp = resp.read()
-        data = json.loads(tmp)
-        self.webqq.event(WebQQMessageEvent(data, self))
+        try:
+            data = json.loads(tmp)
+            self.webqq.event(WebQQMessageEvent(data, self))
+        except ValueError:
+            pass
 
     def is_writable(self):
         with self.lock:
