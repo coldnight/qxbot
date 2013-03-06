@@ -355,7 +355,7 @@ class WebQQ(object):
         self.ptwebqq = None
         self.require_check = False
         self.QUIT = False
-        self.last_msg = None
+        self.last_msg = {}
         self.event_queue = event_queue
         self.check_data = None           # CheckHanlder返回的数据
         self.blogin_data = None          # 登录前返回的数据
@@ -563,8 +563,8 @@ class WebQQ(object):
                 return info.get("result", {}).get("account")
 
     def send_group_msg(self, group_uin, content):
-        if content != self.last_msg:
-            self.last_msg = content
+        if content != self.last_msg.get(group_uin)  :
+            self.last_msg[group_uin] = content
             gid = self.group_map.get(group_uin).get("gid")
             content = [content,["font",
                     {"name":"宋体", "size":10, "style":[0,0,0],
