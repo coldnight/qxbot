@@ -79,9 +79,12 @@ class MessageDispatch(object):
                         result.append(self.get_group_msg_img(uin, value))
 
         if not result and not content.strip() and face:
-            return u"(T T 只有表情,暂时解析不鸟)"
+            return u"(T T 只有QQ表情,暂时解析不鸟)"
         else:
-            return "\n".join(result) + content
+            body = "\n".join(result) + content
+            if face:
+                body += "(QQ表情未解析)"
+            return body
 
     def handle_qq_group_msg(self, message):
         """ 处理组消息 """
