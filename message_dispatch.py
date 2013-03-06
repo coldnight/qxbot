@@ -7,7 +7,7 @@
 #   Desc    :   消息调度
 #
 import tempfile
-from util import get_logger, upload_file
+from utils import get_logger, upload_file
 
 class MessageDispatch(object):
     """ 消息调度器 """

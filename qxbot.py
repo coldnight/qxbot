@@ -16,7 +16,7 @@ from pyxmpp2.interfaces import XMPPFeatureHandler
 from pyxmpp2.interfaces import presence_stanza_handler, message_stanza_handler
 from pyxmpp2.ext.version import VersionProvider
 
-from util import get_logger, EpollMainLoop
+from utils import get_logger, EpollMainLoop
 
 from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, QQ_PWD, BRIDGES
 

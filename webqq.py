@@ -14,12 +14,12 @@ import tempfile
 import threading
 from hashlib import md5
 from functools import partial
-from util import HttpHelper, get_logger, upload_file
 
+from pyxmpp2.mainloop.interfaces import IOHandler, HandlerReady, Event
+
+from utils import HttpHelper, get_logger, upload_file
 from http_socket import HTTPSock
 
-from pyxmpp2.mainloop.interfaces import (IOHandler, HandlerReady, Event,
-                                         PrepareAgain)
 
 http_sock = HTTPSock()
 

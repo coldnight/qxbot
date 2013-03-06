@@ -14,7 +14,7 @@ import httplib
 import urlparse
 import tempfile
 import cookielib
-from util import Form
+from utils import Form
 
 class HTTPSock(object):
     def __init__(self):
