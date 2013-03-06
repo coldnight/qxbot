@@ -5,6 +5,7 @@
 #   E-mail  :   wh_linux@126.com
 #   Date    :   13/03/01 11:28:40
 #   Desc    :   cold
+import Queue
 
 from pyxmpp2.jid import JID
 from pyxmpp2.client import Client
@@ -61,6 +62,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
                              settings, self.mainloop)
         self.logger = get_logger()
         self.msg_dispatch = MessageDispatch(self, self.webqq, BRIDGES)
+        self.xmpp_msg_queue = Queue.Queue()
 
     def run(self, timeout = None):
         self.client.connect()
@@ -108,7 +110,10 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @message_stanza_handler()
     def handle_message(self, stanza):
-        self.msg_dispatch.dispatch_xmpp(stanza)
+        if self.webqq.connected:
+            self.msg_dispatch.dispatch_xmpp(stanza)
+        else:
+            self.xmpp_msg_queue.put(stanza)
 
     @event_handler(DisconnectedEvent)
     def handle_disconnected(self, event):
@@ -187,6 +192,13 @@ class QXBot(EventHandler, XMPPFeatureHandler):
         self.mainloop.add_handler(PollHandler(self.webqq))
         hb = HeartbeatHandler(self.webqq)
         self.mainloop.add_handler(hb)
+        while True:
+            try:
+                stanza = self.xmpp_msg_queue.get_nowait()
+                self.msg_disptach.dispatch_xmpp(stanza)
+            except Queue.Empty:
+                break
+        self.webqq.connected = True
 
     @event_handler(WebQQHeartbeatEvent)
     def handle_webqq_hb(self, event):

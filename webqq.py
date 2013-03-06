@@ -564,6 +564,7 @@ class WebQQ(object):
         self.hb_last_time = self.start_time
         self.poll_last_time = self.start_time
         self._helper = HttpHelper()
+        self.connected = False
 
     def event(self, event, delay = 0):
         """ timeout可以延迟将事件放入事件队列 """
@@ -627,125 +628,6 @@ class WebQQ(object):
         if nickname:
             self.nickname = nickname
 
-    def before_login(self, pwd):
-        password = self.handle_pwd(pwd)
-        t = 1 if self.require_check else 1
-        params = [("u",self._qid), ("p",password),
-                  ("verifycode", self._vcode), ("webqq_type",10),
-                  ("remember_uin", 1),("login2qq",1),
-                  ("aid", self._aid), ("u1", "http://www.qq.com"), ("h", 1),
-                  ("ptredirect", 0), ("ptlang", 2052), ("from_ui", 1),
-                  ("pttype", 1), ("dumy", ""), ("fp", "loginerroralert"),
-                  ("mibao_css","m_webqq"), ("t",t),
-                  ("g",1), ("js_type",0), ("js_ver", 10021)]
-        url = "https://ssl.ptlogin2.qq.com/login"
-        self._helper.change(url, params)
-        self._helper.add_header("Referer",
-                                "https://ui.ptlogin2.qq.com/cgi-bin/login?"
-                                "target=self&style=5&mibao_css=m_webqq&app"
-                                "id=1003903&enable_qlogin=0&no_verifyimg=1"
-                                "&s_url=http%3A%2F%2Fweb.qq.com%2Floginpro"
-                                "xy.html&f_url=log")
-        res = self._helper.open()
-        output = res.read()
-        eval("self."+output.strip().rstrip(";"))
-        self.logger.debug(output)
-
-    def login(self, pwd):
-        """ 利用前几步生成的数据进行登录
-        :接口返回示例
-            {u'retcode': 0,
-            u'result': {
-                'status': 'online', 'index': 1075,
-                'psessionid': '', u'user_state': 0, u'f': 0,
-                u'uin': 1685359365, u'cip': 3673277226,
-                u'vfwebqq': u'', u'port': 43332}}
-            保存result中的psessionid和vfwebqq供后面接口调用
-        """
-
-        self.before_login(pwd)
-        url = "http://d.web2.qq.com/channel/login2"
-        params = [("r", '{"status":"online","ptwebqq":"%s","passwd_sig":"",'
-                   '"clientid":"%d", "psessionid":null}'\
-                   % (self.ptwebqq, self.clientid)),
-                  ("clientid", self.clientid),
-                  ("psessionid", "null")
-                  ]
-        self._helper.change(url, params, "POST")
-        self._helper.add_header("Referer", "http://d.web2.qq.com/proxy.html?"
-                                "v=20110331002&callback=1&id=3")
-        res = self._helper.open()
-        data = json.loads(res.read())
-        self.vfwebqq = data.get("result", {}).get("vfwebqq")
-        self.psessionid = data.get("result", {}).get("psessionid")
-        self.logger.debug(data)
-        if data.get("retcode") == 0:
-            self.logger.info("Login success")
-        else:
-            self.logger.warn("Login Error")
-
-        self.mainloop()
-
-    def mainloop(self):
-        """ 主循环 """
-        if self.logined:
-            heartbeat = threading.Thread(name="heartbeat", target=self.heartbeat)
-            heartbeat.setDaemon(True)
-            heartbeat.start()
-            self.get_group_members()
-            self.poll()
-
-    def get_group_map(self):
-        """ 获取群映射列表 """
-        self.logger.info("Get Group List")
-        url = "http://s.web2.qq.com/api/get_group_name_list_mask2"
-        params = [("r", '{"vfwebqq":"%s"}' % self.vfwebqq),]
-        self._helper.change(url, params, "POST")
-        self._helper.add_header("Origin", "http://s.web2.qq.com")
-        self._helper.add_header("Referer", "http://s.web2.qq.com/proxy.ht"
-                                "ml?v=20110412001&callback=1&id=1")
-
-        res = self._helper.open()
-        data = json.loads(res.read())
-        group_map = {}
-        if data.get("retcode") == 0:
-            group_list = data.get("result", {}).get("gnamelist", [])
-            for group in group_list:
-                gcode = group.get("code")
-                group_map[gcode] = group
-
-        self.group_map = group_map
-        return group_map
-
-    def get_group_members(self):
-        """ 根据群code获取群列表 """
-        group_map = self.get_group_map()
-        self.logger.info("Fetch group members")
-        group_m_map = {}
-        for gcode in group_map:
-            url = "http://s.web2.qq.com/api/get_group_info_ext2"
-            params = [("gcode", gcode),("vfwebqq", self.vfwebqq),
-                    ("t", int(time.time()))]
-            self._helper.change(url, params)
-            self._helper.add_header("Referer", "http://d.web2.qq.com/proxy."
-                                    "html?v=20110331002&callback=1&id=3")
-            res = self._helper.open()
-            info = json.loads(res.read())
-            members = info.get("result", {}).get("minfo", [])
-            group_m_map[gcode] = {}
-            for m in members:
-                uin = m.get("uin")
-                group_m_map[gcode][uin] = m
-
-            cards = info.get("result", {}).get("cards", [])
-            for card in cards:
-                uin = card.get("muin")
-                group_name = card.get("card")
-                group_m_map[gcode][uin]["nick"] = group_name
-
-        self.group_m_map = group_m_map
-        return group_m_map
-
     def get_qid_with_uin(self, uin):
         """ 根据uin获取QQ号 """
         url = "http://s.web2.qq.com/api/get_friend_uin2"
@@ -761,24 +643,6 @@ class WebQQ(object):
             info = json.loads(data)
             if info.get("retcode") == 0:
                 return info.get("result", {}).get("account")
-
-    def send_group_msg(self, group_uin, content):
-        if content != self.last_msg.get(group_uin)  :
-            self.last_msg[group_uin] = content
-            gid = self.group_map.get(group_uin).get("gid")
-            content = [content,["font",
-                    {"name":"宋体", "size":10, "style":[0,0,0],
-                        "color":"000000"}]]
-            r = {"group_uin": gid, "content": json.dumps(content),
-                "msg_id": self.msg_id, "clientid": self.clientid,
-                "psessionid": self.psessionid}
-            self.msg_id += 1
-            url = "http://d.web2.qq.com/channel/send_qun_msg2"
-            params = [("r", json.dumps(r)), ("sessionid", self.psessionid),
-                    ("clientid", self.clientid)]
-            helper = HttpHelper(url, params, "POST")
-            helper.add_header("Referer", "http://d.web2.qq.com/proxy.html")
-            helper.open()
 
     def get_group_msg_img(self, uin, info):
         """ 获取消息中的图片 """
