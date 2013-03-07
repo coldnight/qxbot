@@ -69,12 +69,14 @@ class HTTPSock(object):
 
     def do_http(self, host, port):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
         sock.connect((host, int(port)))
         sock.setblocking(0)
         return sock
 
     def do_https(self, host, port, keyfile = None, certfile = None):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(3)
         sock.connect((host, int(port)))
         sock = ssl.wrap_socket(sock, keyfile, certfile)
         sock.setblocking(0)
