@@ -557,6 +557,7 @@ class WebQQ(object):
         self.connected = False
         self.polled = False
         self.heartbeated = False
+        self.group_lst_updated = False
 
     def event(self, event, delay = 0):
         """ timeout可以延迟将事件放入事件队列 """

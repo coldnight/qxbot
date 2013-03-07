@@ -158,6 +158,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
                 group_map[gcode] = group
 
         self.webqq.group_map = group_map
+        self.webqq.group_lst_updated = False   # 开放添加GroupListHandler
         i = 1
         for gcode in group_map:
             if i == len(group_map):
@@ -183,7 +184,10 @@ class QXBot(EventHandler, XMPPFeatureHandler):
             group_name = card.get("card")
             self.webqq.group_m_map[event.gcode][uin]["nick"] = group_name
 
-        self.mainloop.add_handler(GroupListHandler(self.webqq, delay = 120))
+        # 防止重复添加GroupListHandler
+        if not self.webqq.group_lst_updated:
+            self.webqq.group_lst_updated = True
+            self.mainloop.add_handler(GroupListHandler(self.webqq, delay = 300))
 
     @event_handler(WebQQRosterUpdatedEvent)
     def handle_webqq_roster(self, event):
