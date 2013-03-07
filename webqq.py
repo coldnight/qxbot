@@ -78,15 +78,16 @@ class WebQQMessageEvent(WebQQEvent):
         return u"WebQQ Got msg: {0}".format(self.message)
 
 class RetryEvent(WebQQEvent):
-    def __init__(self, cls, req, handler, *args, **kwargs):
+    def __init__(self, cls, req, handler, err = None, *args, **kwargs):
         self.cls = cls
         self.req = req
         self.handler = handler
         self.args = args
         self.kwargs = kwargs
+        self.err = err
 
     def __unicode__(self):
-        return u"{0} Retry".format(self.cls.__name__)
+        return u"{0} Retry with Error {1}".format(self.cls.__name__, self.err)
 
 class RemoveEvent(WebQQEvent):
     def __init__(self, handler):
@@ -295,8 +296,8 @@ class HeartbeatHandler(WebQQHandler):
             self.req = http_sock.make_request(url, params, self.method)
         try:
             self.sock, self.data = http_sock.make_http_sock_data(self.req)
-        except socket.error:
-            self.webqq.event(RetryEvent(HeartbeatHandler, self.req, self))
+        except socket.error, err:
+            self.webqq.event(RetryEvent(HeartbeatHandler, self.req, self, err))
             self._writable = False
             self.sock = None
             self.data = None
@@ -304,8 +305,8 @@ class HeartbeatHandler(WebQQHandler):
     def handle_write(self):
         try:
             self.sock.sendall(self.data)
-        except socket.error:
-            self.webqq.event(RetryEvent(HeartbeatHandler, self.req, self))
+        except socket.error, err:
+            self.webqq.event(RetryEvent(HeartbeatHandler, self.req, self, err))
         self.webqq.event(WebQQHeartbeatEvent(self), self.delay)
         self._writable = False
 
