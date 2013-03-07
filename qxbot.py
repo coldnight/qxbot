@@ -125,29 +125,36 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @event_handler(RosterReceivedEvent)
     def handle_roster_received(self, event):
+        """ 此处代表xmpp已经连接
+        开始连接QQ, 先将检查是否需要验证码的handler加入到mainloop
+        """
         checkhandler = CheckHandler(self.webqq)
         self.mainloop.add_handler(checkhandler)
         self.connected = True
 
     @event_handler(CheckedEvent)
     def handle_webqq_checked(self, event):
+        """ 第一步已经完毕, 删除掉检查的handler, 将登录前handler加入mainloop"""
         bloginhandler = BeforeLoginHandler(self.webqq, password = QQ_PWD)
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(bloginhandler)
 
     @event_handler(BeforeLoginEvent)
     def handle_webqq_blogin(self, event):
+        """ 登录前完毕开始真正的登录 """
         loginhandler = LoginHandler(self.webqq)
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(loginhandler)
 
     @event_handler(WebQQLoginedEvent)
     def handle_webqq_logined(self, event):
+        """ 登录后将获取群列表的handler放入mainloop """
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(GroupListHandler(self.webqq))
 
     @event_handler(GroupListEvent)
     def handle_webqq_group_list(self, event):
+        """ 获取群列表后"""
         self.mainloop.remove_handler(event.handler)
         data = event.data
         group_map = {}
@@ -172,6 +179,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @event_handler(GroupMembersEvent)
     def handle_group_members(self, event):
+        """ 获取所有群成员 """
         self.mainloop.remove_handler(event.handler)
         members = event.data.get("result", {}).get("minfo", [])
         self.webqq.group_m_map[event.gcode] = {}
@@ -191,6 +199,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @event_handler(WebQQRosterUpdatedEvent)
     def handle_webqq_roster(self, event):
+        """ 群成员都获取完毕后开启,Poll获取消息和心跳 """
         self.mainloop.remove_handler(event.handler)
         self.msg_dispatch.get_map()
         if not self.webqq.polled:
@@ -210,29 +219,35 @@ class QXBot(EventHandler, XMPPFeatureHandler):
 
     @event_handler(WebQQHeartbeatEvent)
     def handle_webqq_hb(self, event):
+        """ 心跳完毕后, 延迟60秒在此触发此事件 重复心跳 """
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(HeartbeatHandler(self.webqq, delay = 60))
 
     @event_handler(WebQQPollEvent)
     def handle_webqq_poll(self, event):
+        """ 延迟1秒重复触发此事件, 轮询获取消息 """
         self.mainloop.remove_handler(event.handler)
         self.mainloop.add_handler(PollHandler(self.webqq, delay = 3))
 
     @event_handler(WebQQMessageEvent)
     def handle_webqq_msg(self, event):
+        """ 有消息到达, 处理消息 """
         self.msg_dispatch.dispatch_qq(event.message)
 
     @event_handler(RetryEvent)
     def handle_retry(self, event):
+        """ 有handler触发异常, 需重试 """
         self.mainloop.remove_handler(event.handler)
         handler = event.cls(self.webqq, event.req, *event.args, **event.kwargs)
         self.mainloop.add_handler(handler)
 
     @event_handler(RemoveEvent)
     def handle_remove(self, event):
+        """ 触发此事件, 移除handler """
         self.mainloop.remove_handler(event.handler)
 
     def send_qq_group_msg(self, group_uin, content):
+        """ 发送qq群消息 """
         handler = GroupMsgHandler(self.webqq, group_uin = group_uin,
                                   content = content)
         self.mainloop.add_handler(handler)
