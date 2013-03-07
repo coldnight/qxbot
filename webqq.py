@@ -565,6 +565,7 @@ class WebQQ(object):
         self.poll_last_time = self.start_time
         self._helper = HttpHelper()
         self.connected = False
+        self.polled = False
 
     def event(self, event, delay = 0):
         """ timeout可以延迟将事件放入事件队列 """

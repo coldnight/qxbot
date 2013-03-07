@@ -189,13 +189,15 @@ class QXBot(EventHandler, XMPPFeatureHandler):
     def handle_webqq_roster(self, event):
         self.mainloop.remove_handler(event.handler)
         self.msg_dispatch.get_map()
-        self.mainloop.add_handler(PollHandler(self.webqq))
+        if not self.webqq.polled:
+            self.webqq.polled = True
+            self.mainloop.add_handler(PollHandler(self.webqq))
         hb = HeartbeatHandler(self.webqq)
         self.mainloop.add_handler(hb)
         while True:
             try:
                 stanza = self.xmpp_msg_queue.get_nowait()
-                self.msg_disptach.dispatch_xmpp(stanza)
+                self.msg_dispatch.dispatch_xmpp(stanza)
             except Queue.Empty:
                 break
         self.webqq.connected = True
