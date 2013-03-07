@@ -309,17 +309,6 @@ class HeartbeatHandler(WebQQHandler):
         self.webqq.event(WebQQHeartbeatEvent(self), self.delay)
         self._writable = False
 
-    def prepare(self):
-        """
-        now = time.time()
-        if self.webqq.start_time == self.webqq.hb_last_time or\
-           now - self.webqq.hb_last_time >= 5:
-            self.webqq.hb_last_time = now
-            return HandlerReady()
-        self._writeable = True
-        """
-        return HandlerReady()
-
     def is_readable(self):
         return False
 
@@ -566,6 +555,7 @@ class WebQQ(object):
         self._helper = HttpHelper()
         self.connected = False
         self.polled = False
+        self.heartbeated = False
 
     def event(self, event, delay = 0):
         """ timeout可以延迟将事件放入事件队列 """

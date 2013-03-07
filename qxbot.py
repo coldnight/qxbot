@@ -192,8 +192,10 @@ class QXBot(EventHandler, XMPPFeatureHandler):
         if not self.webqq.polled:
             self.webqq.polled = True
             self.mainloop.add_handler(PollHandler(self.webqq))
-        hb = HeartbeatHandler(self.webqq)
-        self.mainloop.add_handler(hb)
+        if not self.webqq.heartbeated:
+            self.webqq.heartbeated = True
+            hb = HeartbeatHandler(self.webqq)
+            self.mainloop.add_handler(hb)
         while True:
             try:
                 stanza = self.xmpp_msg_queue.get_nowait()
