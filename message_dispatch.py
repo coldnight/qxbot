@@ -82,7 +82,6 @@ class MessageDispatch(object):
             if isinstance(row, (str, unicode)):
                 content += row.replace(u"【提示：此用户正在使用Q+"
                                        u" Web：http://web.qq.com/】", "")
-
             else:
                 if len(row) == 2:
                     key, value = row
@@ -91,7 +90,8 @@ class MessageDispatch(object):
                         if f: content += f
                         else: face = True
                     if key == "cface":
-                        result.append(self.get_group_msg_img(uin, value))
+                        url  = self.get_group_msg_img(uin, value)
+                        result.append(url)
 
         gender = self.webqq.group_m_map.get(gcode, {}).get(uin, {}).get("gender")
         gender_desc_map = {"male":u"他", None:u"它", "female":u"她"}

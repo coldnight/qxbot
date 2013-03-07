@@ -17,11 +17,14 @@ import cookielib
 from utils import Form
 
 class HTTPSock(object):
+    """ 构建支持Cookie的HTTP socket
+    供可复用的I/O模型调用"""
     def __init__(self):
         cookiefile = tempfile.mktemp()
         self.cookiejar = cookielib.MozillaCookieJar(cookiefile)
 
     def make_request(self, url, form, method = "GET"):
+        """ 根据url 参数 构建 urllib2.Request """
         request = urllib2.Request(url)
         if isinstance(form, Form):
             request.add_header("Content-Type", form.get_content_type())
@@ -41,6 +44,7 @@ class HTTPSock(object):
         return request
 
     def make_response(self, sock, req, method):
+        """ 根据socket和urlib2.Request 构建Response """
         r = httplib.HTTPResponse(sock, 0, strict = 0, method = method, buffering=True)
         r.begin()
 
@@ -56,6 +60,7 @@ class HTTPSock(object):
 
 
     def make_http_sock_data(self, request):
+        """ 根据urllib2.Request 构建socket和用于发送的HTTP源数据 """
         url = request.get_full_url()
         headers = request.headers
         data = request.get_data()

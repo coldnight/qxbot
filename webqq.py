@@ -303,12 +303,12 @@ class HeartbeatHandler(WebQQHandler):
             self.data = None
 
     def handle_write(self):
+        self._writable = False
         try:
             self.sock.sendall(self.data)
         except socket.error, err:
             self.webqq.event(RetryEvent(HeartbeatHandler, self.req, self, err))
         self.webqq.event(WebQQHeartbeatEvent(self), self.delay)
-        self._writable = False
 
     def is_readable(self):
         return False
