@@ -8,8 +8,9 @@
 #
 import time
 import json
-import random
 import socket
+import random
+import httplib
 import tempfile
 import threading
 from hashlib import md5
@@ -345,20 +346,27 @@ class PollHandler(WebQQHandler ):
         self._writable = False
         try:
             self.sock.sendall(self.data)
-            self.webqq.event(WebQQPollEvent(self), self.delay)
+            #self.webqq.event(WebQQPollEvent(self), self.delay)
         except socket.error:
             self.webqq.event(RetryEvent(PollHandler, self.req, self))
         else:
             self._readable = True
 
     def handle_read(self):
-        self._readable = False
+        #self._readable = False
         try:
             resp = http_sock.make_response(self.sock, self.req, self.method)
             tmp = resp.read()
             data = json.loads(tmp)
-            self.webqq.event(WebQQMessageEvent(data, self))
+            if data:
+                self._readable = False
+                self.webqq.event(WebQQPollEvent(self))
+                self.webqq.event(WebQQMessageEvent(data, self))
         except ValueError:
+            pass
+        except socket.error:
+            self.webqq.event(WebQQPollEvent(self))
+        except httplib.BadStatusLine:
             pass
 
     def is_writable(self):
