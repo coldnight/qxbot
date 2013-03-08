@@ -320,8 +320,7 @@ class HeartbeatHandler(WebQQHandler):
 
 class PollHandler(WebQQHandler ):
     """ 获取消息 """
-    def setup(self, delay = 0):
-        self.delay = delay
+    def setup(self):
         self.method = "POST"
         if not self.req:
             url = "http://d.web2.qq.com/channel/poll2"
@@ -346,14 +345,12 @@ class PollHandler(WebQQHandler ):
         self._writable = False
         try:
             self.sock.sendall(self.data)
-            #self.webqq.event(WebQQPollEvent(self), self.delay)
         except socket.error:
             self.webqq.event(RetryEvent(PollHandler, self.req, self))
         else:
             self._readable = True
 
     def handle_read(self):
-        #self._readable = False
         try:
             resp = http_sock.make_response(self.sock, self.req, self.method)
             tmp = resp.read()

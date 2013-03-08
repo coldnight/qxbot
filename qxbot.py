@@ -227,7 +227,7 @@ class QXBot(EventHandler, XMPPFeatureHandler):
     def handle_webqq_poll(self, event):
         """ 延迟1秒重复触发此事件, 轮询获取消息 """
         self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(PollHandler(self.webqq, delay = 3))
+        self.mainloop.add_handler(PollHandler(self.webqq))
 
     @event_handler(WebQQMessageEvent)
     def handle_webqq_msg(self, event):
