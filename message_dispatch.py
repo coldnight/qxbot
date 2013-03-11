@@ -8,7 +8,7 @@
 #
 import random
 import tempfile
-from utils import get_logger, upload_file
+from lib.utils import get_logger, upload_file
 
 class MessageDispatch(object):
     """ 消息调度器 """
@@ -103,6 +103,7 @@ class MessageDispatch(object):
             if face:
                 body += u" ({0}还做了个奇怪的表情)"\
                         .format(gender_desc_map.get(gender, u"它"))
+            body = body.replace("\r", "\n")
             return body
 
     def handle_qq_group_msg(self, message):
@@ -127,9 +128,11 @@ class MessageDispatch(object):
 
     def dispatch_xmpp(self, stanza):
         body = stanza.body
+        body = body.replace("\n", "\r")
+        body = body.replace("\r\r", "\r")
         frm = stanza.from_jid.bare().as_string()
         tos = self.get_uin_account(frm)
-        [self.qxbot.send_qq_group_msg(to, body) for to in tos]
+        [self.webqq.send_qq_group_msg(to, body) for to in tos]
 
 face_map = [
     (14, ":)"),

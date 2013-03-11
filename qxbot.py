@@ -18,19 +18,11 @@ from pyxmpp2.interfaces import presence_stanza_handler, message_stanza_handler
 from pyxmpp2.ext.version import VersionProvider
 from pyxmpp2.roster import RosterReceivedEvent
 
-from utils import get_logger, EpollMainLoop
-
-from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, QQ_PWD, BRIDGES
-
-from webqq import (CheckHandler, WebQQ, BeforeLoginHandler, CheckedEvent,
-                   WebQQLoginedEvent, BeforeLoginEvent, LoginHandler,
-                   HeartbeatHandler, PollHandler, WebQQHeartbeatEvent,
-                   WebQQMessageEvent, WebQQPollEvent, RetryEvent,
-                   RemoveEvent, GroupMsgHandler, GroupListHandler,
-                   GroupListEvent, WebQQRosterUpdatedEvent,
-                   GroupMembersHandler, GroupMembersEvent)
-
+from webqq import WebQQ
+from lib.utils import get_logger
+from lib.libepoll import EpollMainLoop
 from message_dispatch import MessageDispatch
+from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, BRIDGES, QQ_PWD
 
 __version__ = '0.0.1 alpha'
 
@@ -54,13 +46,13 @@ class QXBot(EventHandler, XMPPFeatureHandler):
         settings["password"] = PASSWORD
         version_provider = VersionProvider(settings)
         event_queue = settings["event_queue"]
-        self.webqq = WebQQ(QQ, event_queue)
         self.connected = False
         #self.mainloop = TornadoMainLoop(settings)
         self.mainloop = EpollMainLoop(settings)
         self.client = Client(my_jid, [self, version_provider],
                              settings, self.mainloop)
         self.logger = get_logger()
+        self.webqq = WebQQ(QQ, QQ_PWD, event_queue, self)
         self.msg_dispatch = MessageDispatch(self, self.webqq, BRIDGES)
         self.xmpp_msg_queue = Queue.Queue()
 
@@ -128,129 +120,8 @@ class QXBot(EventHandler, XMPPFeatureHandler):
         """ 此处代表xmpp已经连接
         开始连接QQ, 先将检查是否需要验证码的handler加入到mainloop
         """
-        checkhandler = CheckHandler(self.webqq)
-        self.mainloop.add_handler(checkhandler)
+        self.webqq.run()
         self.connected = True
-
-    @event_handler(CheckedEvent)
-    def handle_webqq_checked(self, event):
-        """ 第一步已经完毕, 删除掉检查的handler, 将登录前handler加入mainloop"""
-        bloginhandler = BeforeLoginHandler(self.webqq, password = QQ_PWD)
-        self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(bloginhandler)
-
-    @event_handler(BeforeLoginEvent)
-    def handle_webqq_blogin(self, event):
-        """ 登录前完毕开始真正的登录 """
-        loginhandler = LoginHandler(self.webqq)
-        self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(loginhandler)
-
-    @event_handler(WebQQLoginedEvent)
-    def handle_webqq_logined(self, event):
-        """ 登录后将获取群列表的handler放入mainloop """
-        self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(GroupListHandler(self.webqq))
-
-    @event_handler(GroupListEvent)
-    def handle_webqq_group_list(self, event):
-        """ 获取群列表后"""
-        self.mainloop.remove_handler(event.handler)
-        data = event.data
-        group_map = {}
-        if data.get("retcode") == 0:
-            group_list = data.get("result", {}).get("gnamelist", [])
-            for group in group_list:
-                gcode = group.get("code")
-                group_map[gcode] = group
-
-        self.webqq.group_map = group_map
-        self.webqq.group_lst_updated = False   # 开放添加GroupListHandler
-        i = 1
-        for gcode in group_map:
-            if i == len(group_map):
-                self.mainloop.add_handler(
-                    GroupMembersHandler(self.webqq, gcode = gcode, done = True))
-            else:
-                self.mainloop.add_handler(
-                    GroupMembersHandler(self.webqq, gcode = gcode, done = False))
-
-            i += 1
-
-    @event_handler(GroupMembersEvent)
-    def handle_group_members(self, event):
-        """ 获取所有群成员 """
-        self.mainloop.remove_handler(event.handler)
-        members = event.data.get("result", {}).get("minfo", [])
-        self.webqq.group_m_map[event.gcode] = {}
-        for m in members:
-            uin = m.get("uin")
-            self.webqq.group_m_map[event.gcode][uin] = m
-        cards = event.data.get("result", {}).get("cards", [])
-        for card in cards:
-            uin = card.get("muin")
-            group_name = card.get("card")
-            self.webqq.group_m_map[event.gcode][uin]["nick"] = group_name
-
-        # 防止重复添加GroupListHandler
-        if not self.webqq.group_lst_updated:
-            self.webqq.group_lst_updated = True
-            self.mainloop.add_handler(GroupListHandler(self.webqq, delay = 300))
-
-    @event_handler(WebQQRosterUpdatedEvent)
-    def handle_webqq_roster(self, event):
-        """ 群成员都获取完毕后开启,Poll获取消息和心跳 """
-        self.mainloop.remove_handler(event.handler)
-        self.msg_dispatch.get_map()
-        if not self.webqq.polled:
-            self.webqq.polled = True
-            self.mainloop.add_handler(PollHandler(self.webqq))
-        if not self.webqq.heartbeated:
-            self.webqq.heartbeated = True
-            hb = HeartbeatHandler(self.webqq)
-            self.mainloop.add_handler(hb)
-        while True:
-            try:
-                stanza = self.xmpp_msg_queue.get_nowait()
-                self.msg_dispatch.dispatch_xmpp(stanza)
-            except Queue.Empty:
-                break
-        self.webqq.connected = True
-
-    @event_handler(WebQQHeartbeatEvent)
-    def handle_webqq_hb(self, event):
-        """ 心跳完毕后, 延迟60秒在此触发此事件 重复心跳 """
-        self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(HeartbeatHandler(self.webqq, delay = 60))
-
-    @event_handler(WebQQPollEvent)
-    def handle_webqq_poll(self, event):
-        """ 延迟1秒重复触发此事件, 轮询获取消息 """
-        self.mainloop.remove_handler(event.handler)
-        self.mainloop.add_handler(PollHandler(self.webqq))
-
-    @event_handler(WebQQMessageEvent)
-    def handle_webqq_msg(self, event):
-        """ 有消息到达, 处理消息 """
-        self.msg_dispatch.dispatch_qq(event.message)
-
-    @event_handler(RetryEvent)
-    def handle_retry(self, event):
-        """ 有handler触发异常, 需重试 """
-        self.mainloop.remove_handler(event.handler)
-        handler = event.cls(self.webqq, event.req, *event.args, **event.kwargs)
-        self.mainloop.add_handler(handler)
-
-    @event_handler(RemoveEvent)
-    def handle_remove(self, event):
-        """ 触发此事件, 移除handler """
-        self.mainloop.remove_handler(event.handler)
-
-    def send_qq_group_msg(self, group_uin, content):
-        """ 发送qq群消息 """
-        handler = GroupMsgHandler(self.webqq, group_uin = group_uin,
-                                  content = content)
-        self.mainloop.add_handler(handler)
 
     @property
     def roster(self):
@@ -282,6 +153,10 @@ class QXBot(EventHandler, XMPPFeatureHandler):
         msg = self.make_message(to, 'chat', body)
         self.stream.send(msg)
 
-if __name__ == "__main__":
+
+def main():
         xmpp = QXBot()
         xmpp.run()
+
+if __name__ == "__main__":
+    main()

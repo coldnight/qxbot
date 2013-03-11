@@ -14,7 +14,7 @@ import httplib
 import urlparse
 import tempfile
 import cookielib
-from utils import Form
+from lib.utils import Form
 
 class HTTPSock(object):
     """ 构建支持Cookie的HTTP socket
