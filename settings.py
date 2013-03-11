@@ -6,6 +6,10 @@
 #   Date    :   13/03/01 14:55:34
 #   Desc    :   配置文件
 #
+import os
+import sys
+
+sys.path.insert(0,os.path.join(os.path.abspath(os.path.dirname(__file__))))
 
 QQ = 1685359365
 

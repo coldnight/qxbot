@@ -21,7 +21,7 @@ from pyxmpp2.roster import RosterReceivedEvent
 from webqq import WebQQ
 from lib.utils import get_logger
 from lib.libepoll import EpollMainLoop
-from message_dispatch import MessageDispatch
+from lib.message_dispatch import MessageDispatch
 from settings import XMPP_ACCOUNT, XMPP_PASSWD, QQ, BRIDGES, QQ_PWD
 
 __version__ = '0.0.1 alpha'
