@@ -1,3 +1,4 @@
+**这个项目已经很长时间没有更新, 可能无法正常使用,如果你需要类似的功能, 可以参考 [magpie](https://github.com/coldnight/magpie) 项目**
 ## 介绍
 一个桥接XMPP和QQ的机器人,现在仅仅支持桥接XMPP和QQ群消息,桥接后可以实现XMPP和QQ互通
 
